@@ -2,22 +2,30 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import Caelestia.Config
 import qs.components
 import qs.components.controls
 import qs.services
+
 Item {
     id: root
+
+    // =========================================================
+    // SIZE
+    // =========================================================
 
     implicitWidth: 900
     implicitHeight: 500
 
-    // ─────────────────────────────────────────────
+    // =========================================================
     // DRAG STATE
-    // ─────────────────────────────────────────────
+    // =========================================================
 
+    property string draggedKey: ""
     property int draggedIndex: -1
-    property var draggedModel: null
+
+    property string draggedTitle: ""
 
     property real dragX: 0
     property real dragY: 0
@@ -25,451 +33,750 @@ Item {
     property real grabOffsetX: 0
     property real grabOffsetY: 0
 
-    property real draggedWidth: 280
-    property real draggedHeight: 80
+    property real draggedWidth: 0
+    property real draggedHeight: 0
 
-    property string draggedTitle: ""
-    property string draggedMeta: ""
+    property string dropKey: ""
+    property int dropIndex: -1
 
-    // ─────────────────────────────────────────────
-    // ADD TASK STATE
-    // ─────────────────────────────────────────────
+    // =========================================================
+    // ADD TASK
+    // =========================================================
 
     property bool addDialogVisible: false
-    property var addTargetModel: null
+
+    property string addTargetKey: ""
     property string addTargetName: ""
 
-    // ─────────────────────────────────────────────
-    // DATA
-    // ─────────────────────────────────────────────
+    // =========================================================
+    // EDITOR
+    // =========================================================
 
-    ListModel {
-        id: backlogModel
+    property bool editorDialogVisible: false
 
-        ListElement {
-            title: "Physics numericals"
-            meta: "Today"
-        }
+    Connections {
+        target: KanbanService
 
-        ListElement {
-            title: "Chemistry notes"
-            meta: "This week"
-        }
-
-        ListElement {
-            title: "Revise calculus"
-            meta: "Later"
+        function onEditorUnavailable() {
+            root.editorDialogVisible = true
         }
     }
 
-    ListModel {
-        id: progressModel
+    // =========================================================
+    // COLUMNS
+    // =========================================================
 
-        ListElement {
-            title: "Physics — Work & Energy"
-            meta: "2h"
-        }
-
-        ListElement {
-            title: "Maths exercise 4"
-            meta: "45m"
-        }
-    }
-
-    ListModel {
-        id: doneModel
-
-        ListElement {
-            title: "English assignment"
-            meta: "Done"
-        }
-
-        ListElement {
-            title: "Biology revision"
-            meta: "Done"
-        }
-    }
-
-    property var columns: [
+    readonly property var columns: [
         {
+            key: "backlog",
             title: "Backlog",
             icon: "inbox",
-            model: backlogModel
+            model: KanbanService.backlog
         },
         {
+            key: "progress",
             title: "In progress",
             icon: "pending",
-            model: progressModel
+            model: KanbanService.progress
         },
         {
+            key: "done",
             title: "Done",
             icon: "check_circle",
-            model: doneModel
+            model: KanbanService.done
         }
     ]
 
-    // ─────────────────────────────────────────────
-    // DRAG HELPERS
-    // ─────────────────────────────────────────────
+    // =========================================================
+    // COLUMN LOOKUP
+    // =========================================================
 
-    function startDrag(model, index, card) {
-        if (!model)
-            return
-
-        if (index < 0 || index >= model.count)
-            return
-
-        const task = model.get(index)
-
-        draggedModel = model
-        draggedIndex = index
-
-        draggedTitle = task.title
-        draggedMeta = task.meta
-
-        draggedWidth = card.width
-        draggedHeight = card.height
-
-        const mousePosition = card.mapToItem(
-            root,
-            card.dragMouseX,
-            card.dragMouseY
-        )
-
-        const cardPosition = card.mapToItem(
-            root,
-            0,
-            0
-        )
-
-        dragX = mousePosition.x
-        dragY = mousePosition.y
-
-        grabOffsetX =
-            mousePosition.x - cardPosition.x
-
-        grabOffsetY =
-            mousePosition.y - cardPosition.y
-    }
-
-    function updateDrag(card) {
-        const mousePosition = card.mapToItem(
-            root,
-            card.dragMouseX,
-            card.dragMouseY
-        )
-
-        dragX = Math.max(
-            0,
-            Math.min(root.width, mousePosition.x)
-        )
-
-        dragY = Math.max(
-            0,
-            Math.min(root.height, mousePosition.y)
-        )
-    }
-
-    function finishDrag() {
-        if (!draggedModel || draggedIndex < 0) {
-            clearDrag()
-            return
-        }
-
-        const target =
-            targetColumnAt(dragX, dragY)
-
-        if (
-            target &&
-            target.columnModel !== draggedModel
-        ) {
-            const task =
-                draggedModel.get(draggedIndex)
-
-            target.columnModel.append({
-                title: task.title,
-                meta: task.meta
-            })
-
-            draggedModel.remove(draggedIndex)
-        }
-
-        clearDrag()
-    }
-
-    function clearDrag() {
-        draggedIndex = -1
-        draggedModel = null
-
-        draggedTitle = ""
-        draggedMeta = ""
-
-        dragX = 0
-        dragY = 0
-
-        grabOffsetX = 0
-        grabOffsetY = 0
-    }
-
-    function targetColumnAt(x, y) {
+    function columnForKey(key) {
         for (
             let i = 0;
-            i < columnRepeater.count;
+            i < columns.length;
             ++i
         ) {
-            const item =
-                columnRepeater.itemAt(i)
-
-            if (!item)
-                continue
-
-            const p =
-                item.mapFromItem(
-                    root,
-                    x,
-                    y
-                )
-
             if (
-                p.x >= 0 &&
-                p.x <= item.width &&
-                p.y >= 0 &&
-                p.y <= item.height
+                columns[i].key === key
             ) {
-                return item
+                return columns[i]
             }
         }
 
         return null
     }
 
-    // ─────────────────────────────────────────────
+    // =========================================================
+    // TARGET COLUMN
+    // =========================================================
+
+    function targetColumnAt(
+        x,
+        y
+    ) {
+        for (
+            let i = 0;
+            i < columnRepeater.count;
+            ++i
+        ) {
+            const column =
+                columnRepeater.itemAt(i)
+
+            if (!column)
+                continue
+
+            const point =
+                column.mapFromItem(
+                    root,
+                    x,
+                    y
+                )
+
+            if (
+                point.x >= 0
+                &&
+                point.x <= column.width
+                &&
+                point.y >= 0
+                &&
+                point.y <= column.height
+            ) {
+                return column
+            }
+        }
+
+        return null
+    }
+
+    // =========================================================
+    // DROP INDEX
+    // =========================================================
+
+    function calculateDropIndex(
+        column
+    ) {
+        if (!column)
+            return 0
+
+        const list =
+            column.cardList
+
+        if (!list)
+            return column.columnModel.count
+
+        const point =
+            list.contentItem.mapFromItem(
+                root,
+                dragX,
+                dragY
+            )
+
+        const y =
+            point.y
+
+        for (
+            let i = 0;
+            i < list.count;
+            ++i
+        ) {
+            const card =
+                list.itemAtIndex(i)
+
+            if (!card)
+                continue
+
+            if (
+                y <
+                card.y
+                +
+                card.height / 2
+            ) {
+                return i
+            }
+        }
+
+        return list.count
+    }
+
+    function updateDropTarget() {
+        const target =
+            targetColumnAt(
+                dragX,
+                dragY
+            )
+
+        if (!target) {
+            dropKey = ""
+            dropIndex = -1
+            return
+        }
+
+        dropKey =
+            target.columnKey
+
+        dropIndex =
+            calculateDropIndex(
+                target
+            )
+    }
+
+    // =========================================================
+    // START DRAG
+    // =========================================================
+
+    function startDrag(
+        key,
+        index,
+        card
+    ) {
+        const column =
+            columnForKey(key)
+
+        if (!column)
+            return
+
+        const model =
+            column.model
+
+        if (
+            index < 0
+            ||
+            index >= model.count
+        ) {
+            return
+        }
+
+        const task =
+            model.get(index)
+
+        draggedKey =
+            key
+
+        draggedIndex =
+            index
+
+        draggedTitle =
+            task.title
+
+        draggedWidth =
+            card.width
+
+        draggedHeight =
+            card.height
+
+        const mousePos =
+            card.mapToItem(
+                root,
+                card.dragMouseX,
+                card.dragMouseY
+            )
+
+        const cardPos =
+            card.mapToItem(
+                root,
+                0,
+                0
+            )
+
+        dragX =
+            mousePos.x
+
+        dragY =
+            mousePos.y
+
+        grabOffsetX =
+            mousePos.x
+            -
+            cardPos.x
+
+        grabOffsetY =
+            mousePos.y
+            -
+            cardPos.y
+
+        updateDropTarget()
+    }
+
+    // =========================================================
+    // UPDATE DRAG
+    // =========================================================
+
+    function updateDrag(card) {
+        const mousePos =
+            card.mapToItem(
+                root,
+                card.dragMouseX,
+                card.dragMouseY
+            )
+
+        dragX =
+            Math.max(
+                0,
+                Math.min(
+                    root.width,
+                    mousePos.x
+                )
+            )
+
+        dragY =
+            Math.max(
+                0,
+                Math.min(
+                    root.height,
+                    mousePos.y
+                )
+            )
+
+        updateDropTarget()
+    }
+
+    // =========================================================
+    // FINISH DRAG
+    // =========================================================
+
+    function finishDrag() {
+        if (
+            draggedKey === ""
+            ||
+            draggedIndex < 0
+        ) {
+            clearDrag()
+            return
+        }
+
+        const target =
+            targetColumnAt(
+                dragX,
+                dragY
+            )
+
+        if (!target) {
+            clearDrag()
+            return
+        }
+
+        let targetIndex =
+            calculateDropIndex(
+                target
+            )
+
+        if (
+            draggedKey ===
+                target.columnKey
+            &&
+            draggedIndex < targetIndex
+        ) {
+            targetIndex--
+        }
+
+        KanbanService.moveTask(
+            draggedKey,
+            draggedIndex,
+            target.columnKey,
+            targetIndex
+        )
+
+        clearDrag()
+    }
+
+    function clearDrag() {
+        draggedKey = ""
+        draggedIndex = -1
+
+        draggedTitle = ""
+
+        dragX = 0
+        dragY = 0
+
+        grabOffsetX = 0
+        grabOffsetY = 0
+
+        draggedWidth = 0
+        draggedHeight = 0
+
+        dropKey = ""
+        dropIndex = -1
+    }
+
+    // =========================================================
     // ADD TASK
-    // ─────────────────────────────────────────────
+    // =========================================================
 
-    function openAddTask(model, columnName) {
-        addTargetModel = model
-        addTargetName = columnName
+    function openAddTask(
+        key,
+        name
+    ) {
+        addTargetKey =
+            key
 
-        addDialogVisible = true
+        addTargetName =
+            name
 
-        addTitleField.text = ""
-        addMetaField.text = ""
+        addTitleField.text =
+            ""
+
+        addBodyField.text =
+            ""
+
+        addDialogVisible =
+            true
 
         Qt.callLater(function() {
             addTitleField.forceActiveFocus()
         })
     }
 
-    function addTask() {
-        if (!addTargetModel)
-            return
+    function closeAddTask() {
+        addDialogVisible =
+            false
 
+        addTargetKey =
+            ""
+
+        addTargetName =
+            ""
+
+        addTitleField.text =
+            ""
+
+        addBodyField.text =
+            ""
+    }
+
+    function addTask() {
         const title =
             addTitleField.text.trim()
 
         if (!title)
             return
 
-        const meta =
-            addMetaField.text.trim()
-
-        addTargetModel.append({
-            title: title,
-            meta: meta || "No details"
-        })
+        KanbanService.addTask(
+            addTargetKey,
+            title,
+            addBodyField.text
+        )
 
         closeAddTask()
     }
 
-    function closeAddTask() {
-        addDialogVisible = false
-        addTargetModel = null
-        addTargetName = ""
+    // =========================================================
+    // MAIN
+    // =========================================================
 
-        addTitleField.text = ""
-        addMetaField.text = ""
-    }
+    ColumnLayout {
+        anchors.fill:
+            parent
 
-    // ─────────────────────────────────────────────
-    // BOARD
-    // ─────────────────────────────────────────────
+        spacing:
+            Tokens.spacing.small
 
-    RowLayout {
-        id: board
+        // =====================================================
+        // HEADER
+        // =====================================================
 
-        anchors.fill: parent
-        spacing: Tokens.spacing.medium
+        RowLayout {
+            Layout.fillWidth:
+                true
 
-        Repeater {
-            id: columnRepeater
+            spacing:
+                Tokens.spacing.small
 
-            model: root.columns
+            MaterialIcon {
+                text:
+                    "view_kanban"
 
-            delegate: StyledRect {
-                id: column
+                color:
+                    Colours.palette.m3primary
 
-                required property var modelData
+                fontStyle:
+                    Tokens.font.icon.medium
+            }
 
-                property var columnModel:
-                    modelData.model
+            StyledText {
+                Layout.fillWidth:
+                    true
 
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredWidth: 1
-                Layout.minimumWidth: 220
+                text:
+                    "Kanban"
+
+                font:
+                    Tokens.font.title.large
+
+                color:
+                    Colours.palette.m3onSurface
+            }
+
+            // =================================================
+            // EDIT BOARD
+            // =================================================
+
+            StyledRect {
+                id: editBoardButton
+
+                implicitWidth:
+                    editButtonContent.implicitWidth
+                    +
+                    Tokens.padding.medium * 2
+
+                implicitHeight:
+                    editButtonContent.implicitHeight
+                    +
+                    Tokens.padding.small * 2
 
                 radius:
-                    Tokens.rounding.extraLarge
+                    Tokens.rounding.large
 
-                color: {
-                    const target =
-                        root.draggedModel
-                        ? root.targetColumnAt(
-                            root.dragX,
-                            root.dragY
-                        )
-                        : null
+                color:
+                    Colours.palette
+                        .m3surfaceContainerHighest
 
-                    return target === column
-                        ? Colours.palette.m3primaryContainer
-                        : Colours.palette.m3surfaceContainer
-                }
+                StateLayer {
+                    anchors.fill:
+                        parent
 
-                Behavior on color {
-                    ColorAnimation {
-                        duration: 120
+                    radius:
+                        Tokens.rounding.large
+
+                    onClicked: {
+                        KanbanService.openEditor()
                     }
                 }
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins:
-                        Tokens.padding.large
+                RowLayout {
+                    id: editButtonContent
+
+                    anchors.centerIn:
+                        parent
 
                     spacing:
-                        Tokens.spacing.medium
+                        Tokens.spacing.small
 
-                    // ─────────────────────────
-                    // HEADER
-                    // ─────────────────────────
-
-                    RowLayout {
-                        Layout.fillWidth: true
-
-                        spacing:
-                            Tokens.spacing.small
-
-                        MaterialIcon {
-                            text:
-                                modelData.icon
-
-                            color:
-                                Colours.palette.m3primary
-
-                            fontStyle:
-                                Tokens.font.icon.medium
-                        }
-
-                        StyledText {
-                            Layout.fillWidth: true
-
-                            text:
-                                modelData.title
-
-                            font:
-                                Tokens.font.title.medium
-
-                            color:
-                                Colours.palette.m3onSurface
-                        }
-
-                        StyledText {
-                            text:
-                                column.columnModel.count
-
-                            font:
-                                Tokens.font.label.medium
-
-                            color:
-                                Colours.palette.m3onSurfaceVariant
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: 1
+                    MaterialIcon {
+                        text:
+                            "edit"
 
                         color:
-                            Colours.palette.m3outlineVariant
+                            Colours.palette.m3primary
+
+                        fontStyle:
+                            Tokens.font.icon.small
                     }
 
-                    // ─────────────────────────
-                    // CARD AREA
-                    // ─────────────────────────
+                    StyledText {
+                        text:
+                            "Edit board"
 
-                    Item {
-                        id: cardArea
+                        font:
+                            Tokens.font.label.large
 
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        color:
+                            Colours.palette.m3primary
+                    }
+                }
+            }
+        }
 
-                        Repeater {
+        // =====================================================
+        // BOARD
+        // =====================================================
+
+        RowLayout {
+            Layout.fillWidth:
+                true
+
+            Layout.fillHeight:
+                true
+
+            spacing:
+                Tokens.spacing.medium
+
+            Repeater {
+                id: columnRepeater
+
+                model:
+                    root.columns
+
+                delegate: StyledRect {
+                    id: column
+
+                    required property var modelData
+
+                    property string columnKey:
+                        modelData.key
+
+                    property string columnTitle:
+                        modelData.title
+
+                    property var columnModel:
+                        modelData.model
+
+                    property alias cardList:
+                        cardListView
+
+                    Layout.fillWidth:
+                        true
+
+                    Layout.fillHeight:
+                        true
+
+                    Layout.minimumWidth:
+                        220
+
+                    Layout.preferredWidth:
+                        1
+
+                    radius:
+                        Tokens.rounding.extraLarge
+
+                    color:
+                        root.dropKey ===
+                            column.columnKey
+                        ?
+                        Colours.palette
+                            .m3primaryContainer
+                        :
+                        Colours.palette
+                            .m3surfaceContainer
+
+                    ColumnLayout {
+                        anchors.fill:
+                            parent
+
+                        anchors.margins:
+                            Tokens.padding.large
+
+                        spacing:
+                            Tokens.spacing.medium
+
+                        // =============================================
+                        // COLUMN HEADER
+                        // =============================================
+
+                        RowLayout {
+                            Layout.fillWidth:
+                                true
+
+                            spacing:
+                                Tokens.spacing.small
+
+                            MaterialIcon {
+                                text:
+                                    modelData.icon
+
+                                color:
+                                    Colours.palette.m3primary
+
+                                fontStyle:
+                                    Tokens.font.icon.medium
+                            }
+
+                            StyledText {
+                                Layout.fillWidth:
+                                    true
+
+                                text:
+                                    modelData.title
+
+                                font:
+                                    Tokens.font.title.medium
+
+                                color:
+                                    Colours.palette.m3onSurface
+                            }
+
+                            StyledText {
+                                text:
+                                    column.columnModel.count
+
+                                font:
+                                    Tokens.font.label.medium
+
+                                color:
+                                    Colours.palette.m3onSurfaceVariant
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth:
+                                true
+
+                            implicitHeight:
+                                1
+
+                            color:
+                                Colours.palette.m3outlineVariant
+                        }
+
+                        // =============================================
+                        // CARD LIST
+                        // =============================================
+
+                        ListView {
+                            id: cardListView
+
+                            Layout.fillWidth:
+                                true
+
+                            Layout.fillHeight:
+                                true
+
+                            clip:
+                                true
+
                             model:
                                 column.columnModel
+
+                            spacing:
+                                Tokens.spacing.small
+
+                            boundsBehavior:
+                                Flickable.StopAtBounds
+
+                            flickableDirection:
+                                Flickable.VerticalFlick
 
                             delegate: StyledRect {
                                 id: card
 
                                 required property string title
-                                required property string meta
+                                required property string body
                                 required property int index
 
-                                property var sourceModel:
-                                    column.columnModel
+                                property real dragMouseX:
+                                    0
+
+                                property real dragMouseY:
+                                    0
 
                                 property bool beingDragged:
-                                    root.draggedModel ===
-                                    sourceModel
+                                    root.draggedKey ===
+                                        column.columnKey
                                     &&
                                     root.draggedIndex ===
-                                    index
-
-                                property real dragMouseX: 0
-                                property real dragMouseY: 0
+                                        index
 
                                 width:
-                                    cardArea.width
+                                    cardListView.width
 
-                                height:
-                                    cardContent.implicitHeight
-                                    + Tokens.padding.medium * 2
-
-                                x: 0
-
-                                y:
-                                    index *
-                                    (
-                                        height
-                                        + Tokens.spacing.small
+                                implicitHeight:
+                                    Math.max(
+                                        64,
+                                        cardContent.implicitHeight
+                                        +
+                                        Tokens.padding.medium * 2
                                     )
-
-                                z:
-                                    beingDragged
-                                    ? 100
-                                    : 0
-
-                                // Leave a "ghost" behind.
-                                opacity:
-                                    beingDragged
-                                    ? 0.22
-                                    : 1
 
                                 radius:
                                     Tokens.rounding.large
 
                                 color:
                                     Colours.palette.m3surface
+
+                                opacity:
+                                    beingDragged
+                                    ? 0.18
+                                    : 1
 
                                 border.width:
                                     beingDragged
@@ -481,15 +788,45 @@ Item {
                                     ? Colours.palette.m3primary
                                     : Colours.palette.m3outlineVariant
 
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 100
-                                    }
+                                z:
+                                    beingDragged
+                                    ? 100
+                                    : 0
+
+                                // =========================================
+                                // DROP INDICATOR
+                                // =========================================
+
+                                Rectangle {
+                                    visible:
+                                        root.dropKey ===
+                                            column.columnKey
+                                        &&
+                                        root.dropIndex ===
+                                            card.index
+
+                                    anchors.left:
+                                        parent.left
+
+                                    anchors.right:
+                                        parent.right
+
+                                    anchors.bottom:
+                                        parent.top
+
+                                    height:
+                                        3
+
+                                    radius:
+                                        2
+
+                                    color:
+                                        Colours.palette.m3primary
                                 }
 
-                                // ─────────────────
+                                // =========================================
                                 // DRAG
-                                // ─────────────────
+                                // =========================================
 
                                 MouseArea {
                                     id: dragArea
@@ -497,12 +834,14 @@ Item {
                                     anchors.fill:
                                         parent
 
-                                    preventStealing: true
+                                    preventStealing:
+                                        true
 
                                     acceptedButtons:
                                         Qt.LeftButton
 
-                                    hoverEnabled: true
+                                    hoverEnabled:
+                                        true
 
                                     cursorShape:
                                         pressed
@@ -511,32 +850,34 @@ Item {
 
                                     onPressed:
                                         function(mouse) {
-                                            card.dragMouseX =
-                                                mouse.x
+                                        card.dragMouseX =
+                                            mouse.x
 
-                                            card.dragMouseY =
-                                                mouse.y
+                                        card.dragMouseY =
+                                            mouse.y
 
-                                            root.startDrag(
-                                                card.sourceModel,
-                                                card.index,
-                                                card
-                                            )
-                                        }
+                                        root.startDrag(
+                                            column.columnKey,
+                                            card.index,
+                                            card
+                                        )
+                                    }
 
                                     onPositionChanged:
                                         function(mouse) {
-                                            if (!pressed)
-                                                return
+                                        if (!pressed)
+                                            return
 
-                                            card.dragMouseX =
-                                                mouse.x
+                                        card.dragMouseX =
+                                            mouse.x
 
-                                            card.dragMouseY =
-                                                mouse.y
+                                        card.dragMouseY =
+                                            mouse.y
 
-                                            root.updateDrag(card)
-                                        }
+                                        root.updateDrag(
+                                            card
+                                        )
+                                    }
 
                                     onReleased: {
                                         root.finishDrag()
@@ -547,11 +888,11 @@ Item {
                                     }
                                 }
 
-                                // ─────────────────
-                                // CARD CONTENT
-                                // ─────────────────
+                                // =========================================
+                                // CARD TITLE
+                                // =========================================
 
-                                ColumnLayout {
+                                StyledText {
                                     id: cardContent
 
                                     anchors.left:
@@ -566,90 +907,71 @@ Item {
                                     anchors.margins:
                                         Tokens.padding.medium
 
-                                    spacing:
-                                        Tokens.spacing.small
+                                    text:
+                                        card.title
 
-                                    StyledText {
-                                        Layout.fillWidth: true
+                                    font:
+                                        Tokens.font.body.medium
 
-                                        text:
-                                            card.title
+                                    color:
+                                        Colours.palette.m3onSurface
 
-                                        font:
-                                            Tokens.font.body.medium
-
-                                        color:
-                                            Colours.palette.m3onSurface
-
-                                        wrapMode:
-                                            Text.Wrap
-                                    }
-
-                                    StyledText {
-                                        Layout.fillWidth: true
-
-                                        text:
-                                            card.meta
-
-                                        font:
-                                            Tokens.font.label.small
-
-                                        color:
-                                            Colours.palette.m3onSurfaceVariant
-
-                                        elide:
-                                            Text.ElideRight
-                                    }
+                                    wrapMode:
+                                        Text.Wrap
                                 }
                             }
                         }
-                    }
 
-                    // ─────────────────────────
-                    // ADD TASK
-                    // ─────────────────────────
+                        // =============================================
+                        // ADD TASK
+                        // =============================================
 
-                    StyledRect {
-                        Layout.fillWidth: true
+                        StyledRect {
+                            Layout.fillWidth:
+                                true
 
-                        implicitHeight:
-                            addTaskLabel.implicitHeight
-                            + Tokens.padding.medium * 2
-
-                        radius:
-                            Tokens.rounding.large
-
-                        color:
-                            Colours.palette
-                                .m3surfaceContainerHighest
-
-                        StateLayer {
-                            anchors.fill: parent
+                            implicitHeight:
+                                addTaskLabel.implicitHeight
+                                +
+                                Tokens.padding.medium * 2
 
                             radius:
                                 Tokens.rounding.large
 
-                            onClicked: {
-                                root.openAddTask(
-                                    column.columnModel,
-                                    modelData.title
-                                )
-                            }
-                        }
-
-                        StyledText {
-                            id: addTaskLabel
-
-                            anchors.centerIn:
-                                parent
-
-                            text: "+ Add task"
-
-                            font:
-                                Tokens.font.label.large
-
                             color:
-                                Colours.palette.m3primary
+                                Colours.palette
+                                    .m3surfaceContainerHighest
+
+                            StateLayer {
+                                anchors.fill:
+                                    parent
+
+                                radius:
+                                    Tokens.rounding.large
+
+                                onClicked: {
+                                    root.openAddTask(
+                                        column.columnKey,
+                                        column.columnTitle
+                                    )
+                                }
+                            }
+
+                            StyledText {
+                                id: addTaskLabel
+
+                                anchors.centerIn:
+                                    parent
+
+                                text:
+                                    "+ Add task"
+
+                                font:
+                                    Tokens.font.label.large
+
+                                color:
+                                    Colours.palette.m3primary
+                            }
                         }
                     }
                 }
@@ -657,21 +979,18 @@ Item {
         }
     }
 
-    // ═════════════════════════════════════════════
+    // =========================================================
     // FLOATING DRAG PREVIEW
-    //
-    // IMPORTANT:
-    // This is OUTSIDE the column Repeater.
-    // Therefore there is exactly ONE preview.
-    // ═════════════════════════════════════════════
+    // =========================================================
 
     StyledRect {
         id: dragPreview
 
         visible:
-            root.draggedModel !== null
+            root.draggedKey !== ""
 
-        z: 5000
+        z:
+            5000
 
         width:
             root.draggedWidth
@@ -684,7 +1003,9 @@ Item {
                 0,
                 Math.min(
                     root.width - width,
-                    root.dragX - root.grabOffsetX
+                    root.dragX
+                    -
+                    root.grabOffsetX
                 )
             )
 
@@ -693,7 +1014,9 @@ Item {
                 0,
                 Math.min(
                     root.height - height,
-                    root.dragY - root.grabOffsetY
+                    root.dragY
+                    -
+                    root.grabOffsetY
                 )
             )
 
@@ -703,76 +1026,60 @@ Item {
         color:
             Colours.palette.m3primaryContainer
 
-        border.width: 2
+        border.width:
+            2
 
         border.color:
             Colours.palette.m3primary
 
-        opacity: 0.94
+        opacity:
+            0.95
 
-        enabled: false
+        enabled:
+            false
 
-        ColumnLayout {
-            id: dragPreviewContent
+        StyledText {
+            anchors.left:
+                parent.left
 
-            anchors.left: parent.left
-            anchors.right: parent.right
+            anchors.right:
+                parent.right
+
             anchors.verticalCenter:
                 parent.verticalCenter
 
             anchors.margins:
                 Tokens.padding.medium
 
-            spacing:
-                Tokens.spacing.small
+            text:
+                root.draggedTitle
 
-            StyledText {
-                Layout.fillWidth: true
+            font:
+                Tokens.font.body.medium
 
-                text:
-                    root.draggedTitle
+            color:
+                Colours.palette.m3onPrimaryContainer
 
-                font:
-                    Tokens.font.body.medium
-
-                color:
-                    Colours.palette.m3onPrimaryContainer
-
-                wrapMode:
-                    Text.Wrap
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-
-                text:
-                    root.draggedMeta
-
-                font:
-                    Tokens.font.label.small
-
-                color:
-                    Colours.palette.m3onSurfaceVariant
-
-                elide:
-                    Text.ElideRight
-            }
+            wrapMode:
+                Text.Wrap
         }
     }
 
-    // ─────────────────────────────────────────────
+    // =========================================================
     // ADD TASK DIALOG
-    // ─────────────────────────────────────────────
+    // =========================================================
 
     Rectangle {
-        id: dialogOverlay
+        id: addOverlay
 
-        anchors.fill: parent
+        anchors.fill:
+            parent
 
         visible:
             root.addDialogVisible
 
-        z: 6000
+        z:
+            6000
 
         color:
             Qt.alpha(
@@ -781,7 +1088,8 @@ Item {
             )
 
         MouseArea {
-            anchors.fill: parent
+            anchors.fill:
+                parent
 
             onClicked: {
                 root.closeAddTask()
@@ -791,18 +1099,21 @@ Item {
         StyledRect {
             id: addDialog
 
-            anchors.centerIn: parent
+            anchors.centerIn:
+                parent
 
             width:
                 Math.min(
                     parent.width
-                    - Tokens.padding.large * 2,
-                    460
+                    -
+                    Tokens.padding.large * 2,
+                    520
                 )
 
             implicitHeight:
-                dialogContent.implicitHeight
-                + Tokens.padding.large * 2
+                addContent.implicitHeight
+                +
+                Tokens.padding.large * 2
 
             radius:
                 Tokens.rounding.extraLarge
@@ -810,21 +1121,24 @@ Item {
             color:
                 Colours.palette.m3surfaceContainerHigh
 
-            border.width: 1
+            border.width:
+                1
 
             border.color:
                 Colours.palette.m3outlineVariant
 
             MouseArea {
-                anchors.fill: parent
+                anchors.fill:
+                    parent
 
                 onClicked: {}
             }
 
             ColumnLayout {
-                id: dialogContent
+                id: addContent
 
-                anchors.fill: parent
+                anchors.fill:
+                    parent
 
                 anchors.margins:
                     Tokens.padding.large
@@ -846,7 +1160,8 @@ Item {
                 StyledText {
                     text:
                         "Add to "
-                        + root.addTargetName
+                        +
+                        root.addTargetName
 
                     font:
                         Tokens.font.body.small
@@ -858,7 +1173,8 @@ Item {
                 StyledTextField {
                     id: addTitleField
 
-                    Layout.fillWidth: true
+                    Layout.fillWidth:
+                        true
 
                     placeholderText:
                         "Task title"
@@ -868,36 +1184,63 @@ Item {
                     }
                 }
 
-                StyledTextField {
-                    id: addMetaField
+                Rectangle {
+                    Layout.fillWidth:
+                        true
 
-                    Layout.fillWidth: true
+                    Layout.preferredHeight:
+                        140
 
-                    placeholderText:
-                        "Details (optional)"
+                    radius:
+                        Tokens.rounding.large
 
-                    onAccepted: {
-                        root.addTask()
+                    color:
+                        Colours.palette.m3surface
+
+                    border.width:
+                        1
+
+                    border.color:
+                        Colours.palette.m3outlineVariant
+
+                    TextEdit {
+                        id: addBodyField
+
+                        anchors.fill:
+                            parent
+
+                        anchors.margins:
+                            Tokens.padding.medium
+
+                        textFormat:
+                            TextEdit.PlainText
+
+                        wrapMode:
+                            TextEdit.Wrap
+
+                        font:
+                            Tokens.font.body.medium
+
+                        color:
+                            Colours.palette.m3onSurface
+
+                        selectByMouse:
+                            true
                     }
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                    implicitHeight: 1
                 }
 
                 RowLayout {
-                    Layout.fillWidth: true
-
-                    spacing:
-                        Tokens.spacing.small
+                    Layout.fillWidth:
+                        true
 
                     Item {
-                        Layout.fillWidth: true
+                        Layout.fillWidth:
+                            true
                     }
 
                     TextButton {
-                        text: "Cancel"
+                        text:
+                            "Cancel"
 
                         onClicked: {
                             root.closeAddTask()
@@ -905,13 +1248,269 @@ Item {
                     }
 
                     TextButton {
-                        text: "Add"
+                        text:
+                            "Add"
 
                         type:
                             TextButton.Filled
 
                         onClicked: {
                             root.addTask()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // =========================================================
+    // OPEN WITH EDITOR
+    // =========================================================
+
+    Rectangle {
+        id: editorOverlay
+
+        anchors.fill:
+            parent
+
+        visible:
+            root.editorDialogVisible
+
+        z:
+            7000
+
+        color:
+            Qt.alpha(
+                Colours.palette.m3scrim,
+                0.55
+            )
+
+        MouseArea {
+            anchors.fill:
+                parent
+
+            onClicked: {
+                root.editorDialogVisible =
+                    false
+            }
+        }
+
+        StyledRect {
+            id: editorDialog
+
+            anchors.centerIn:
+                parent
+
+            width:
+                Math.min(
+                    parent.width
+                    -
+                    Tokens.padding.large * 2,
+                    440
+                )
+
+            implicitHeight:
+                editorContent.implicitHeight
+                +
+                Tokens.padding.large * 2
+
+            radius:
+                Tokens.rounding.extraLarge
+
+            color:
+                Colours.palette.m3surfaceContainerHigh
+
+            border.width:
+                1
+
+            border.color:
+                Colours.palette.m3outlineVariant
+
+            MouseArea {
+                anchors.fill:
+                    parent
+
+                onClicked: {}
+            }
+
+            ColumnLayout {
+                id: editorContent
+
+                anchors.fill:
+                    parent
+
+                anchors.margins:
+                    Tokens.padding.large
+
+                spacing:
+                    Tokens.spacing.small
+
+                StyledText {
+                    Layout.fillWidth:
+                        true
+
+                    text:
+                        "Open board with…"
+
+                    font:
+                        Tokens.font.headline.small
+
+                    color:
+                        Colours.palette.m3onSurface
+                }
+
+                StyledText {
+                    Layout.fillWidth:
+                        true
+
+                    text:
+                        KanbanService.kanbanPath
+
+                    font:
+                        Tokens.font.body.small
+
+                    color:
+                        Colours.palette.m3onSurfaceVariant
+
+                    elide:
+                        Text.ElideMiddle
+                }
+
+                Item {
+                    implicitHeight:
+                        Tokens.padding.small
+                }
+
+                Repeater {
+                    model:
+                        KanbanService.availableEditors
+
+                    delegate: StyledRect {
+                        required property var modelData
+
+                        Layout.fillWidth:
+                            true
+
+                        implicitHeight:
+                            editorName.implicitHeight
+                            +
+                            Tokens.padding.medium * 2
+
+                        radius:
+                            Tokens.rounding.large
+
+                        color:
+                            Colours.palette.m3surface
+
+                        StateLayer {
+                            anchors.fill:
+                                parent
+
+                            radius:
+                                Tokens.rounding.large
+
+                            onClicked: {
+                                root.editorDialogVisible =
+                                    false
+
+                                KanbanService.launchEditor(
+                                    modelData.command
+                                )
+                            }
+                        }
+
+                        RowLayout {
+                            anchors.fill:
+                                parent
+
+                            anchors.margins:
+                                Tokens.padding.medium
+
+                            spacing:
+                                Tokens.spacing.medium
+
+                            MaterialIcon {
+                                text:
+                                    modelData.icon
+
+                                color:
+                                    Colours.palette.m3primary
+
+                                fontStyle:
+                                    Tokens.font.icon.medium
+                            }
+
+                            StyledText {
+                                id: editorName
+
+                                Layout.fillWidth:
+                                    true
+
+                                text:
+                                    modelData.name
+
+                                font:
+                                    Tokens.font.body.medium
+
+                                color:
+                                    Colours.palette.m3onSurface
+                            }
+
+                            MaterialIcon {
+                                text:
+                                    "chevron_right"
+
+                                color:
+                                    Colours.palette.m3onSurfaceVariant
+
+                                fontStyle:
+                                    Tokens.font.icon.small
+                            }
+                        }
+                    }
+                }
+
+                StyledText {
+                    visible:
+                        KanbanService.availableEditors.length === 0
+
+                    Layout.fillWidth:
+                        true
+
+                    horizontalAlignment:
+                        Text.AlignHCenter
+
+                    text:
+                        "No supported editor was found."
+
+                    font:
+                        Tokens.font.body.medium
+
+                    color:
+                        Colours.palette.m3onSurfaceVariant
+                }
+
+                Item {
+                    implicitHeight:
+                        Tokens.padding.small
+                }
+
+                RowLayout {
+                    Layout.fillWidth:
+                        true
+
+                    Item {
+                        Layout.fillWidth:
+                            true
+                    }
+
+                    TextButton {
+                        text:
+                            "Cancel"
+
+                        onClicked: {
+                            root.editorDialogVisible =
+                                false
                         }
                     }
                 }
