@@ -37,17 +37,30 @@ Item {
                 enabled: Config.dashboard.showPerformance
             },
             {
+                component: kanbanComponent,
+                iconName: "view_kanban",
+                text: "Kanban",
+                enabled: true
+            },
+            {
                 component: weatherComponent,
                 iconName: "cloud",
                 text: Tr.tr("Weather"),
                 enabled: Config.dashboard.showWeather
             }
         ];
+
         return allTabs.filter(tab => tab.enabled);
     }
 
-    readonly property real nonAnimWidth: view.implicitWidth + viewWrapper.anchors.margins * 2
-    readonly property real nonAnimHeight: tabs.implicitHeight + tabs.anchors.topMargin + view.implicitHeight + viewWrapper.anchors.margins * 2
+    readonly property real nonAnimWidth:
+        view.implicitWidth + viewWrapper.anchors.margins * 2
+
+    readonly property real nonAnimHeight:
+        tabs.implicitHeight
+        + tabs.anchors.topMargin
+        + view.implicitHeight
+        + viewWrapper.anchors.margins * 2
 
     implicitWidth: nonAnimWidth
     implicitHeight: nonAnimHeight
@@ -58,7 +71,14 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.topMargin: CUtils.clamp(anchors.margins - Config.border.thickness, 0, anchors.margins)
+
+        anchors.topMargin:
+            CUtils.clamp(
+                anchors.margins - Config.border.thickness,
+                0,
+                anchors.margins
+            )
+
         anchors.margins: Tokens.padding.large
 
         nonAnimWidth: root.nonAnimWidth - anchors.margins * 2
@@ -73,6 +93,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+
         anchors.margins: Tokens.padding.large
 
         radius: Tokens.rounding.large
@@ -81,9 +102,11 @@ Item {
         Flickable {
             id: view
 
-            readonly property int currentIndex: root.screenState.dashboardTab
+            readonly property int currentIndex:
+                root.screenState.dashboardTab
+
             readonly property Item currentItem: {
-                repeater.count; // Trigger update on count change
+                repeater.count;
                 return repeater.itemAt(currentIndex);
             }
 
@@ -103,10 +126,20 @@ Item {
                     return;
 
                 const x = contentX - currentItem.x;
-                if (x > currentItem.implicitWidth / 2)
-                    root.screenState.dashboardTab = Math.min(root.screenState.dashboardTab + 1, tabs.count - 1);
-                else if (x < -currentItem.implicitWidth / 2)
-                    root.screenState.dashboardTab = Math.max(root.screenState.dashboardTab - 1, 0);
+
+                if (x > currentItem.implicitWidth / 2) {
+                    root.screenState.dashboardTab =
+                        Math.min(
+                            root.screenState.dashboardTab + 1,
+                            tabs.count - 1
+                        );
+                } else if (x < -currentItem.implicitWidth / 2) {
+                    root.screenState.dashboardTab =
+                        Math.max(
+                            root.screenState.dashboardTab - 1,
+                            0
+                        );
+                }
             }
 
             onDragEnded: {
@@ -114,12 +147,24 @@ Item {
                     return;
 
                 const x = contentX - currentItem.x;
-                if (x > currentItem.implicitWidth / 10)
-                    root.screenState.dashboardTab = Math.min(root.screenState.dashboardTab + 1, tabs.count - 1);
-                else if (x < -currentItem.implicitWidth / 10)
-                    root.screenState.dashboardTab = Math.max(root.screenState.dashboardTab - 1, 0);
-                else
-                    contentX = Qt.binding(() => currentItem?.x ?? 0);
+
+                if (x > currentItem.implicitWidth / 10) {
+                    root.screenState.dashboardTab =
+                        Math.min(
+                            root.screenState.dashboardTab + 1,
+                            tabs.count - 1
+                        );
+                } else if (x < -currentItem.implicitWidth / 10) {
+                    root.screenState.dashboardTab =
+                        Math.max(
+                            root.screenState.dashboardTab - 1,
+                            0
+                        );
+                } else {
+                    contentX = Qt.binding(
+                        () => currentItem?.x ?? 0
+                    );
+                }
             }
 
             RowLayout {
@@ -145,9 +190,25 @@ Item {
                         Component.onCompleted: active = Qt.binding(() => {
                             if (index === view.currentIndex)
                                 return true;
-                            const vx = Math.floor(view.visibleArea.xPosition * view.contentWidth);
-                            const vex = Math.floor(vx + view.visibleArea.widthRatio * view.contentWidth);
-                            return (vx >= x && vx <= x + implicitWidth) || (vex >= x && vex <= x + implicitWidth);
+
+                            const vx =
+                                Math.floor(
+                                    view.visibleArea.xPosition
+                                    * view.contentWidth
+                                );
+
+                            const vex =
+                                Math.floor(
+                                    vx
+                                    + view.visibleArea.widthRatio
+                                    * view.contentWidth
+                                );
+
+                            return (
+                                (vx >= x && vx <= x + implicitWidth)
+                                ||
+                                (vex >= x && vex <= x + implicitWidth)
+                            );
                         })
                     }
                 }
@@ -174,6 +235,12 @@ Item {
                 id: performanceComponent
 
                 Performance {}
+            }
+
+            Component {
+                id: kanbanComponent
+
+                Kanban {}
             }
 
             Component {
